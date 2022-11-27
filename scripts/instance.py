@@ -70,13 +70,13 @@ class StochasticBinPackerGenerator:
     def generate_multi_peak(self, n1, n2, m2):
         ratio_h = int(m2 * 0.5)
         h_vals = np.concatenate((np.random.normal(7 * n2, n2, ratio_h),
-                                np.random.normal(12 * n2, n2, m2 - ratio_h)))
+                                 np.random.normal(12 * n2, n2, m2 - ratio_h)))
         np.random.shuffle(h_vals)
         h_vals = np.clip(h_vals, 0, None)
         t_size = m2 * n1
         ratio_t = int(t_size * 0.5)
         T_vals = np.concatenate((np.random.normal(10, 5, ratio_t),
-                                np.random.normal(24, 5, t_size - ratio_t)))
+                                 np.random.normal(24, 5, t_size - ratio_t)))
         T_vals = np.clip(T_vals, 0, None)
         T_vals = np.reshape(T_vals, (m2, n1))
         cluster_vals = np.sum(T_vals, axis=1) + h_vals
@@ -94,7 +94,7 @@ class StochasticBinPackerGenerator:
 
         c1 = np.array(s1_problem.getAttr('Obj', s1_problem.getVars()))
         c2 = np.array(s1_problem.getAttr('Obj', s1_problem.getVars())) / 2
-        bounds = (np.sum(c2) * -500, np.sum(c2) * 500)
+        bounds = (np.sum(c2) * -5000, np.sum(c2) * 5000)
         b1 = np.array(s1_problem.getAttr('RHS', s1_problem.getConstrs()))
         b2 = np.array(s2_problem.getAttr('RHS', s2_problem.getConstrs()))
 
@@ -112,13 +112,13 @@ class StochasticBinPackerGenerator:
             W_list[i] = A2
             q_list[i] = c2
             if distribution == "multipeak":
-                h_xi, T_xi, c_vars = self.generate_multi_peak(n1,n2, m2)
+                h_xi, T_xi, c_vars = self.generate_multi_peak(n1, n2, m2)
             elif distribution == "normal":
-                h_xi, T_xi, c_vars = self.generate_normal_stochastic(n1,n2,m2)
+                h_xi, T_xi, c_vars = self.generate_normal_stochastic(n1, n2, m2)
             elif distribution == "gamma":
-                h_xi, T_xi, c_vars = self.generate_gamma_stochastic(n1,n2,m2)
+                h_xi, T_xi, c_vars = self.generate_gamma_stochastic(n1, n2, m2)
             else:
-                h_xi, T_xi, c_vars = self.generate_uniform_stochastics(n1,n2,m2)
+                h_xi, T_xi, c_vars = self.generate_uniform_stochastics(n1, n2, m2)
             h = b2 + h_xi
             h_list[i] = h
             T_list[i] = T_xi
@@ -127,32 +127,33 @@ class StochasticBinPackerGenerator:
         clust_vars = np.stack(clust_vars)
         return Instance(A1, b1, c1,
                         q_list, W_list, h_list, T_list, clust_vars,
-                        s1_problem.modelSense, s2_problem.modelSense, bounds, distribution = distribution,
+                        s1_problem.modelSense, s2_problem.modelSense, bounds, distribution=distribution,
                         other_info=other_info)
-    def batch_generator(self,distributions, n1_range, n2_range, k_range):
+
+    def batch_generator(self, distributions, n1_range, n2_range, k_range):
         n_instances = len(distributions) * len(n1_range) * len(n2_range) * len(k_range)
         print(f"Generating {n_instances} instances")
         configs = [None] * n_instances
         count = 0
-        for dist in distributions: # 4
-            for n1 in n1_range: #50 100, 150, 200
-                for n2 in n2_range: # 50, 100, 150, 200
-                    for k in k_range: # 100, 200, 300 ,400
-                                configs[count] = {
-                                    "dist":dist,
-                                    "n1":n1,
-                                    "n2":n2,
-                                    "m1":n1 * 2,
-                                    "m2":n2 * 2,
-                                    "k":k
-                                }
-                                count = count + 1
+        for dist in distributions:  # 4
+            for n1 in n1_range:  # 50 100, 150, 200
+                for n2 in n2_range:  # 50, 100, 150, 200
+                    for k in k_range:  # 100, 200, 300 ,400
+                        configs[count] = {
+                            "dist": dist,
+                            "n1": n1,
+                            "n2": n2,
+                            "m1": n1 * 2,
+                            "m2": n2 * 2,
+                            "k": k,
+                            "distribution": dist
+                        }
+                        count = count + 1
         instance_list = [None] * n_instances
 
         for i in trange(len(configs)):
             config = configs[i]
             instance_list[i] = self.generate_problem(config['n1'], config['n2'],
                                                      config['m1'], config['m2'],
-                                                     config['k'], k)
+                                                     config['k'], config['distribution'])
         return instance_list, configs
-
