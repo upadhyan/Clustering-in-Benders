@@ -154,5 +154,5 @@ class StochasticBinPackerGenerator:
             instance_list[i] = self.generate_problem(config['n1'], config['n2'],
                                                      config['m1'], config['m2'],
                                                      config['k'], k)
-        return instance_list
+        return instance_list, configs
 
