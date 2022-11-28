@@ -7,7 +7,7 @@ import time
 import gc
 
 
-def clustering_scenarios(problem, method, multi=True):
+def clustering_scenarios(problem, method):
     k = problem.k
     n_clust = [int(k * x / 100) for x in range(5, 15 + 1)]
     if method == 'kmeans':
