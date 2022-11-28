@@ -1,33 +1,47 @@
 from sklearn.cluster import SpectralClustering, KMeans, AffinityPropagation, AgglomerativeClustering
+from sklearn.metrics import silhouette_score
 import numpy as np
 import gurobipy as gp
 from gurobipy import GRB
 import time
 import gc
 
-def clustering_scenarios(problem, type, n_cluster, multi = True):
-    if type == 'kmeans':
-        clustering = KMeans(n_clusters=n_cluster, random_state=0).fit(problem.clust_vars)
-    elif type == 'hierarchical':
-        clustering = AgglomerativeClustering().fit(problem.clust_vars)
-    elif type == 'spectral':
-        clustering = SpectralClustering(n_clusters=n_cluster, assign_labels='cluster_qr', random_state=0).fit(problem.clust_vars)
-    elif type == 'affinity':
-        clustering = AffinityPropagation(random_state=0).fit(problem.clust_vars)
+
+def clustering_scenarios(problem, method, n_cluster, multi=True):
+    k = problem.k
+    n_clust = [int(k * x / 100) for x in range(5, 15 + 1)]
+    if method == 'kmeans':
+        labels = [KMeans(n_clusters=n).fit_predict(problem.clust_vars) for n in n_clust]
+        scores = [silhouette_score(problem.clust_vars, label) for label in labels]
+        # clustering = KMeans(n_clusters=n_cluster, random_state=0).fit(problem.clust_vars)
+    elif method == 'hierarchical':
+        labels = [AgglomerativeClustering(n_clusters=n).fit_predict(problem.clust_vars) for n in n_clust]
+        scores = [silhouette_score(problem.clust_vars, label) for label in labels]
+    elif method == 'spectral':
+        labels = [
+            SpectralClustering(n_clusters=n, assign_labels='cluster_qr', random_state=0).fit_predict(problem.clust_vars)
+            for n in n_clust]
+        scores = [silhouette_score(problem.clust_vars, label) for label in labels]
+        # clustering = SpectralClustering(n_clusters=n_cluster, assign_labels='cluster_qr', random_state=0).fit(
+        #    problem.clust_vars)
+    elif method == 'affinity':
+        labels = [AffinityPropagation(random_state=0).fit_predict(problem.clust_vars)]
+        scores = [12]
+        # clustering = AffinityPropagation(random_state=0).fit(problem.clust_vars)
     else:
         raise ValueError("clustering type not given")
 
-    label = clustering.labels_
-    
+    label = labels[np.argmin(np.argmin(scores))]
+
     label_dic = {}
     for i in range(len(label)):
         if label[i] not in label_dic.keys():
             label_dic[label[i]] = [i]
         else:
             label_dic[label[i]].append(i)
-    
+
     n_label = int(max(label_dic.keys()) + 1)
-    
+
     if multi:
         q_list = []
         W_list = []
@@ -153,21 +167,23 @@ def dropout_cut(problem, type, n_cluster):
     }
     return results
 
+
 def hybrid(problem, type, n_cluster):
     MP = gp.Model("MP")
     MP.Params.outputFlag = 0
 
-    q_dict, W_dict, h_dict, T_dict, n_label, max_range = clustering_scenarios(problem, type, n_cluster, multi = False)
+    q_dict, W_dict, h_dict, T_dict, n_label, max_range = clustering_scenarios(problem, type, n_cluster, multi=False)
 
     x = MP.addMVar((problem.s1_n_var,), name="x")
-    theta = MP.addMVar((n_label,), name = "theta", ub = problem.eta_bounds[1] * max_range, lb = problem.eta_bounds[0] * max_range)
+    theta = MP.addMVar((n_label,), name="theta", ub=problem.eta_bounds[1] * max_range,
+                       lb=problem.eta_bounds[0] * max_range)
     if problem.s1_direction == GRB.MAXIMIZE:
         MP.modelSense = GRB.MAXIMIZE
     else:
         MP.modelSense = GRB.MINIMIZE
 
     MP.setObjective(
-        problem.c @ x + np.array([1/n_label] * n_label) @ theta 
+        problem.c @ x + np.array([1 / n_label] * n_label) @ theta
     )
 
     c1 = MP.addConstr(
@@ -182,7 +198,7 @@ def hybrid(problem, type, n_cluster):
     highest_LB = 0
     UB = np.abs(problem.eta_bounds[0]) * 10000
     t1 = time.time()
-    
+
     while cut_found:
         gc.collect()
         curr_time = time.time()
@@ -257,3 +273,4 @@ def hybrid(problem, type, n_cluster):
         "distribution": problem.distribution
     }
     return results
+
