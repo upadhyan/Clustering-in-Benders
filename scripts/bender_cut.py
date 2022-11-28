@@ -10,12 +10,12 @@ def clustering_scenarios(problem, type, n_cluster, multi = True):
         clustering = AgglomerativeClustering().fit(problem.clust_vars)
     elif type == 'spectral':
         clustering = SpectralClustering(n_clusters=n_cluster, assign_labels='cluster_qr', random_state=0).fit(problem.clust_vars)
-    elif type == '':
+    elif type == 'affinity':
         clustering = AffinityPropagation(random_state=0).fit(problem.clust_vars)
     else:
         raise ValueError("clustering type not given")
 
-    label = clustering.predict(problem.clust_vars)
+    label = clustering.labels_
     
     label_dic = {}
     for i in range(len(label)):
@@ -271,3 +271,4 @@ def hybrid(problem, type, n_cluster):
             print(f"Iteration {n_iters}: LB = {LB}. UB = {MP.ObjVal}")
     except:
         print(f"Errored out on iteration: {n_iters} scenario {s}")
+
