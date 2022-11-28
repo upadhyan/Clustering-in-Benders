@@ -103,7 +103,8 @@ def dropout_cut(problem, method):
     highest_LB = 0
     UB = np.abs(problem.eta_bounds[0]) * 10000
     t1 = time.time()
-    primal_gap_perc = UB - highest_LB
+    primal_gap_perc = 1
+    primal_gap = UB - highest_LB
     while cut_found:
         gc.collect()
         curr_time = time.time()
@@ -178,11 +179,15 @@ def dropout_cut(problem, method):
     return results
 
 
-def hybrid(problem, method, n_cluster):
+def hybrid(problem, method):
     MP = gp.Model("MP")
     MP.Params.outputFlag = 0
 
-    q_dict, W_dict, h_dict, T_dict, n_label, max_range = clustering_scenarios(problem, method, n_cluster, multi=False)
+    q_dict, W_dict, h_dict, T_dict, n_label, max_range = clustering_scenarios(problem, method)
+    p = []
+    for i in range(n_label):
+        p.append(len(q_dict[i]) / problem.k)
+    p = np.array(p)
 
     x = MP.addMVar((problem.s1_n_var,), name="x")
     theta = MP.addMVar((n_label,), name="theta", ub=problem.eta_bounds[1] * max_range,
@@ -193,7 +198,7 @@ def hybrid(problem, method, n_cluster):
         MP.modelSense = GRB.MINIMIZE
 
     MP.setObjective(
-        problem.c @ x + np.array([1 / n_label] * n_label) @ theta
+        problem.c @ x + p @ theta
     )
 
     c1 = MP.addConstr(
@@ -208,12 +213,19 @@ def hybrid(problem, method, n_cluster):
     highest_LB = 0
     UB = np.abs(problem.eta_bounds[0]) * 10000
     t1 = time.time()
+    primal_gap = UB - highest_LB
+    primal_gap_perc = primal_gap / UB
 
     while cut_found:
         gc.collect()
         curr_time = time.time()
         if curr_time - t1 >= 300:
             status = "timelimit"
+            break
+        if primal_gap_perc < 0.000001:
+            status = "optimal"
+            primal_gap = 0
+            primal_gap_perc = 0
             break
         n_iters = n_iters + 1
         cut_found = False
@@ -257,11 +269,13 @@ def hybrid(problem, method, n_cluster):
                         theta[i] <= p1 - gp.quicksum(p2[a] * x[a] for a in range(problem.s1_n_var))
                     )
                     n_cuts = n_cuts + 1
-        LB = LB + sum(sub_problem_lst)
+        LB = LB + np.array(sub_problem_lst) @ p
         t_bl_2 = time.time()
         BL_solve_time = BL_solve_time + t_bl_2 - t_bl_1
         if LB > highest_LB:
             highest_LB = LB
+        primal_gap = (UB - highest_LB)
+        primal_gap_perc = primal_gap / UB
     t2 = time.time()
     elapsed_time = t2 - t1
     results = {
@@ -272,8 +286,8 @@ def hybrid(problem, method, n_cluster):
         "avg_mp_solve": MP_solve_time / n_iters,
         "avg_benders_loop_solve": BL_solve_time / n_iters,
         "status": status,
-        "primal_gap": UB - LB,
-        "primal_gap_perc": (UB - LB) / UB,
+        "primal_gap": primal_gap,
+        "primal_gap_perc": primal_gap_perc,
         "runtime": elapsed_time,
         "n1": problem.s1_n_var,
         "n2": problem.s2_n_var,
