@@ -56,49 +56,28 @@ def clustering_scenarios(problem, method, multi=True):
         T_dict[key] = np.array(problem.T_list)[value]
     return q_dict, W_dict, h_dict, T_dict, n_label, max_range
 
-    if multi:
-        q_list = []
-        W_list = []
-        h_list = []
-        T_list = []
-        for key, value in label_dic.items():
-            index = value[0]
-            q_list.append(problem.q_list[index])
-            W_list.append(problem.W_list[index])
-            h_list.append(problem.h_list[index])
-            T_list.append(problem.T_list[index])
-
-        return q_list, W_list, h_list, T_list, n_label
-
-    else:
-        q_dict = {}
-        W_dict = {}
-        h_dict = {}
-        T_dict = {}
-        max_range = 0
-        for key, value in label_dic.items():
-            if max_range < len(value) + 1:
-                max_range = len(value) + 1
-            q_dict[key] = np.array(problem.q_list)[value]
-            W_dict[key] = np.array(problem.W_list)[value]
-            h_dict[key] = np.array(problem.h_list)[value]
-            T_dict[key] = np.array(problem.T_list)[value]
-        return q_dict, W_dict, h_dict, T_dict, n_label, max_range
 
 
-def dropout_cut(problem, type, n_cluster):
+def dropout_cut(problem, method):
     MP = gp.Model("MP")
     MP.Params.outputFlag = 0
 
-    q_dict, W_dict, h_dict, T_dict, n_label, _ = clustering_scenarios(problem, type, n_cluster)
+    q_dict, W_dict, h_dict, T_dict, n_label, _ = clustering_scenarios(problem, method)
     p = []
     q_cluster, W_cluster, h_cluster, T_cluster = [], [], [], []
     for i in range(n_label):
-        p.append([len(q_dict[i])])
+        p.append(len(q_dict[i]) / problem.k)
         q_cluster.append(q_dict[i][0])
         W_cluster.append(W_dict[i][0])
         h_cluster.append(h_dict[i][0])
         T_cluster.append(T_dict[i][0])
+    
+    p = np.array(p)
+    q_cluster = np.array(q_cluster)
+    W_cluster = np.array(W_cluster)
+    h_cluster = np.array(h_cluster)
+    T_cluster = np.array(T_cluster)
+
 
 
     x = MP.addMVar((problem.s1_n_var,), name="x")
@@ -124,6 +103,7 @@ def dropout_cut(problem, type, n_cluster):
     highest_LB = 0
     UB = np.abs(problem.eta_bounds[0]) * 10000
     t1 = time.time()
+    primal_gap_perc = UB - highest_LB
     while cut_found:
         gc.collect()
         curr_time = time.time()
@@ -173,6 +153,8 @@ def dropout_cut(problem, type, n_cluster):
         BL_solve_time = BL_solve_time + t_bl_2 - t_bl_1
         if LB > highest_LB:
             highest_LB = LB
+        primal_gap = (UB - highest_LB)
+        primal_gap_perc = primal_gap / UB
     t2 = time.time()
     elapsed_time = t2 - t1
     results = {
@@ -183,8 +165,8 @@ def dropout_cut(problem, type, n_cluster):
         "avg_mp_solve": MP_solve_time / n_iters,
         "avg_benders_loop_solve": BL_solve_time / n_iters,
         "status": status,
-        "primal_gap": UB - highest_LB,
-        "primal_gap_perc": (UB - LB) / UB,
+        "primal_gap": primal_gap,
+        "primal_gap_perc": primal_gap_perc,
         "runtime": elapsed_time,
         "n1": problem.s1_n_var,
         "n2": problem.s2_n_var,
@@ -196,11 +178,11 @@ def dropout_cut(problem, type, n_cluster):
     return results
 
 
-def hybrid(problem, type, n_cluster):
+def hybrid(problem, method, n_cluster):
     MP = gp.Model("MP")
     MP.Params.outputFlag = 0
 
-    q_dict, W_dict, h_dict, T_dict, n_label, max_range = clustering_scenarios(problem, type, n_cluster, multi=False)
+    q_dict, W_dict, h_dict, T_dict, n_label, max_range = clustering_scenarios(problem, method, n_cluster, multi=False)
 
     x = MP.addMVar((problem.s1_n_var,), name="x")
     theta = MP.addMVar((n_label,), name="theta", ub=problem.eta_bounds[1] * max_range,
