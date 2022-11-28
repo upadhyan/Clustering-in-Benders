@@ -16,11 +16,15 @@ def clustering_scenarios(problem, type, n_cluster, multi = True):
         raise ValueError("clustering type not given")
 
     label = clustering.predict(problem.clust_vars)
-    n_label = clustering.n_features_in_
     
     label_dic = {}
-    for i in range(n_label):
-        label_dic[i] = np.where(label==i)
+    for i in range(len(label)):
+        if label[i] not in label_dic.keys():
+            label_dic[label[i]] = [i]
+        else:
+            label_dic[label[i]].append(i)
+    
+    n_label = int(max(label_dic.keys()) + 1)
     
     if multi:
         q_list = []
@@ -110,6 +114,7 @@ def dropout_multicut(problem, type, n_cluster):
                 Q = SP.ObjVal
                 q_vals.append(Q)
                 pi = res.Pi
+                BestLB = 0
                 LB = LB + Q / k
                 if np.abs(Q - eta_i[s]) > 0.00001:
                     if Q < eta_i[s]:
@@ -123,8 +128,10 @@ def dropout_multicut(problem, type, n_cluster):
                         else:
                             MP.addConstr(
                                 eta[s] >= p1 - gp.quicksum(p2[a] * x[a] for a in range(problem.s1_n_var))
-                            )        
-            print(f"Iteration {n_iters}: LB = {LB}. UB = {MP.ObjVal}")
+                            )
+                if(LB > BestLB):
+                    BestLB = LB        
+            print(f"Iteration {n_iters}: LB = {BestLB}. UB = {MP.ObjVal}")
     except:
         print(f"Errored out on iteration: {n_iters} scenario {s}")
 
@@ -166,7 +173,7 @@ def single_cut(problem):
             MP.optimize()
             LB = 0
             x_i = x.x
-            theta_i = theta.x
+            theta = theta.x
             p1 = 0
             p2 = 0
             for s in range(problem.k):
@@ -186,13 +193,15 @@ def single_cut(problem):
                 q_vals.append(Q)
                 pi = res.Pi
                 p1 = p1 + pi @ problem.h_list[s] / problem.k
-                p2 = p2 + pi @ problem.h_list[s] / problem.k
+                p2 = p2 + pi @ problem.T_list[s] / problem.k
                 LB = LB + Q / problem.k
-                if np.abs(Q - theta_i) > 0.00001:
-                    if Q < theta_i[s]:
-                        cut_found = True
-                        MP.addConstr(theta - p2 @ x <= p1)
-            print(f"Iteration {n_iters}: LB = {LB}. UB = {MP.ObjVal}")
+            if np.abs(LB - theta) > 0.00001:
+                if LB < theta:
+                    cut_found = True
+                    MP.addConstr(theta + p2 @ x <= p1)
+            if(LB > BestLB):
+                BestLB = LB        
+            print(f"Iteration {n_iters}: LB = {BestLB}. UB = {MP.ObjVal}")
     except:
         print(f"Errored out on iteration: {n_iters} scenario {s}")
 
