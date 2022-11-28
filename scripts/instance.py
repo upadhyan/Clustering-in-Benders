@@ -94,7 +94,7 @@ class StochasticBinPackerGenerator:
 
         c1 = np.array(s1_problem.getAttr('Obj', s1_problem.getVars()))
         c2 = np.array(s2_problem.getAttr('Obj', s2_problem.getVars()))
-        bounds = (np.sum(c2) * -5000, np.sum(c2) * 5000)
+        bounds = (np.sum(c2) * -50 * k * n2, np.sum(c2) * 50 * n2 * k)
         b1 = np.array(s1_problem.getAttr('RHS', s1_problem.getConstrs()))
         b2 = np.array(s2_problem.getAttr('RHS', s2_problem.getConstrs()))
 
@@ -131,14 +131,14 @@ class StochasticBinPackerGenerator:
                         other_info=other_info)
 
     def batch_generator(self):
-        n_instances = 3 * 3 * 3 * 4
+        n_instances = 3 * 4 * 4 * 4
         print(f"Generating {n_instances} instances")
         instance_list = [None] * n_instances
         count = 0
-        for dist in ["multipeak","normal","uniform"]:  # 3
-            for n1 in [100, 150, 200]:  # 50 100, 150, 200
-                for n2 in [100, 150, 200]:  # 50, 100, 150, 200
-                    for k in [100,200,300,400]:  # 100, 200, 300 ,400
+        for dist in ["multipeak", "normal", "uniform"]:  # 3
+            for n1 in [50, 100, 150, 200]:  # 50 100, 150, 200
+                for n2 in [50, 100, 150, 200]:  # 50, 100, 150, 200
+                    for k in [100, 200, 300, 400]:  # 100, 200, 300 ,400
                         instance_list[count] = self.generate_problem(n1, n2, n1 * 2, n2 * 2, k, dist)
                         count = count + 1
         return instance_list

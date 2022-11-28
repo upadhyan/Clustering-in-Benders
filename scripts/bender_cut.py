@@ -41,7 +41,7 @@ def clustering_scenarios(problem, method):
             label_dic[label[i]].append(i)
 
     n_label = int(max(label_dic.keys()) + 1)
-    
+
     q_dict = {}
     W_dict = {}
     h_dict = {}
@@ -55,7 +55,6 @@ def clustering_scenarios(problem, method):
         h_dict[key] = np.array(problem.h_list)[value]
         T_dict[key] = np.array(problem.T_list)[value]
     return q_dict, W_dict, h_dict, T_dict, n_label, max_range
-
 
 
 def dropout_cut(problem, method):
@@ -72,14 +71,12 @@ def dropout_cut(problem, method):
         W_cluster.append(W_dict[i][0])
         h_cluster.append(h_dict[i][0])
         T_cluster.append(T_dict[i][0])
-    
+
     p = np.array(p)
     q_cluster = np.array(q_cluster)
     W_cluster = np.array(W_cluster)
     h_cluster = np.array(h_cluster)
     T_cluster = np.array(T_cluster)
-
-
 
     x = MP.addMVar((problem.s1_n_var,), name="x")
     eta = MP.addMVar((n_label,), name="eta", ub=problem.eta_bounds[1], lb=problem.eta_bounds[0])
@@ -159,7 +156,7 @@ def dropout_cut(problem, method):
     t2 = time.time()
     elapsed_time = t2 - t1
     results = {
-        "method": "dropout-cut",
+        "method": "multi-cut",
         "obj_val": MP.ObjVal,
         "n_cuts": n_cuts,
         "n_iterations": n_iters,
@@ -297,4 +294,3 @@ def hybrid(problem, method):
         "distribution": problem.distribution
     }
     return results
-
