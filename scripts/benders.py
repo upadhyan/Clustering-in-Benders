@@ -12,11 +12,7 @@ def multi_cut_bender(problem):
     MP.Params.outputFlag = 0
     x = MP.addMVar((problem.s1_n_var,), name="x")
     eta = MP.addMVar((problem.k,), name="eta", ub=problem.eta_bounds[1], lb=problem.eta_bounds[0])
-    if problem.s1_direction == GRB.MAXIMIZE:
-        MP.modelSense = GRB.MAXIMIZE
-    else:
-        MP.modelSense = GRB.MINIMIZE
-
+    MP.modelSense = problem.s1_direction
     MP.setObjective(
         problem.c @ x + np.array([1 / problem.k] * problem.k) @ eta
     )
@@ -33,11 +29,19 @@ def multi_cut_bender(problem):
     highest_LB = 0
     UB = np.abs(problem.eta_bounds[0]) * 10000
     t1 = time.time()
+    LB = 0
+    primal_gap_perc = 1
+    primal_gap = UB - LB
     while cut_found:
         gc.collect()
         curr_time = time.time()
         if curr_time - t1 >= 300:
             status = "timelimit"
+            break
+        if primal_gap_perc < 0.000001:
+            status = "optimal"
+            primal_gap = 0
+            primal_gap_perc = 0
             break
         n_iters = n_iters + 1
         cut_found = False
@@ -77,6 +81,8 @@ def multi_cut_bender(problem):
         BL_solve_time = BL_solve_time + t_bl_2 - t_bl_1
         if LB > highest_LB:
             highest_LB = LB
+        primal_gap = (UB - LB)
+        primal_gap_perc = primal_gap / UB
     t2 = time.time()
     elapsed_time = t2 - t1
     results = {
@@ -87,8 +93,8 @@ def multi_cut_bender(problem):
         "avg_mp_solve": MP_solve_time / n_iters,
         "avg_benders_loop_solve": BL_solve_time / n_iters,
         "status": status,
-        "primal_gap": UB - highest_LB,
-        "primal_gap_perc": (UB - highest_LB) / UB,
+        "primal_gap": primal_gap,
+        "primal_gap_perc": primal_gap_perc,
         "runtime": elapsed_time,
         "n1": problem.s1_n_var,
         "n2": problem.s2_n_var,
@@ -104,12 +110,8 @@ def single_cut_benders(problem):
     MP = gp.Model("MP")
     MP.Params.outputFlag = 0
     x = MP.addMVar((problem.s1_n_var,), name="x")
-    theta = MP.addMVar((1,), name="eta", ub=problem.eta_bounds[1], lb=problem.eta_bounds[0])
-    if problem.s1_direction == GRB.MAXIMIZE:
-        MP.modelSense = GRB.MAXIMIZE
-    else:
-        MP.modelSense = GRB.MINIMIZE
-
+    theta = MP.addMVar((1,), name="eta", ub=problem.eta_bounds[1] * problem.k, lb=problem.eta_bounds[0] * problem.k)
+    MP.modelSense = problem.s1_direction
     MP.setObjective(
         problem.c @ x + theta
     )
@@ -124,14 +126,22 @@ def single_cut_benders(problem):
     BL_solve_time = 0
     status = "optimal"
     highest_LB = 0
-    UB = np.abs(problem.eta_bounds[0]) * 10000
+    UB = np.abs(problem.eta_bounds[1] * problem.k)
     t1 = time.time()
     p = [1 / problem.k] * problem.k
+    LB = 0
+    primal_gap = UB - LB
+    primal_gap_perc = primal_gap / UB
     while cut_found:
         gc.collect()
         curr_time = time.time()
         if curr_time - t1 >= 300:
             status = "timelimit"
+            break
+        if primal_gap_perc < 0.000001:
+            status = "optimal"
+            primal_gap = 0
+            primal_gap_perc = 0
             break
         n_iters = n_iters + 1
         cut_found = False
@@ -175,6 +185,8 @@ def single_cut_benders(problem):
         BL_solve_time = BL_solve_time + t_bl_2 - t_bl_1
         if LB > highest_LB:
             highest_LB = LB
+        primal_gap = (UB - LB)
+        primal_gap_perc = primal_gap / UB
     t2 = time.time()
     elapsed_time = t2 - t1
     results = {
@@ -185,8 +197,8 @@ def single_cut_benders(problem):
         "avg_mp_solve": MP_solve_time / n_iters,
         "avg_benders_loop_solve": BL_solve_time / n_iters,
         "status": status,
-        "primal_gap": highest_LB - UB,
-        "primal_gap_perc": (UB - highest_LB) / UB,
+        "primal_gap": primal_gap,
+        "primal_gap_perc": primal_gap_perc,
         "runtime": elapsed_time,
         "n1": problem.s1_n_var,
         "n2": problem.s2_n_var,
