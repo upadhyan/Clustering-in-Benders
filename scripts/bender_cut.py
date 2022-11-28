@@ -61,6 +61,7 @@ def clustering_scenarios(problem, method):
 def dropout_cut(problem, method):
     MP = gp.Model("MP")
     MP.Params.outputFlag = 0
+    t1 = time.time()
 
     q_dict, W_dict, h_dict, T_dict, n_label, _ = clustering_scenarios(problem, method)
     p = []
@@ -102,7 +103,6 @@ def dropout_cut(problem, method):
     status = "optimal"
     highest_LB = 0
     UB = np.abs(problem.eta_bounds[0]) * 10000
-    t1 = time.time()
     primal_gap_perc = 1
     primal_gap = UB - highest_LB
     while cut_found:
@@ -182,6 +182,7 @@ def dropout_cut(problem, method):
 def hybrid(problem, method):
     MP = gp.Model("MP")
     MP.Params.outputFlag = 0
+    t1 = time.time()
 
     q_dict, W_dict, h_dict, T_dict, n_label, max_range = clustering_scenarios(problem, method)
     p = []
@@ -212,7 +213,6 @@ def hybrid(problem, method):
     status = "optimal"
     highest_LB = 0
     UB = np.abs(problem.eta_bounds[0]) * 10000
-    t1 = time.time()
     primal_gap = UB - highest_LB
     primal_gap_perc = primal_gap / UB
 
