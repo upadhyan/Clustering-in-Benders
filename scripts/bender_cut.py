@@ -4,8 +4,11 @@ import gurobipy as gp
 from gurobipy import GRB
 import time
 import gc
+from sklearn.metrics import silhouette_score
 
-def clustering_scenarios(problem, type, n_cluster, multi = True):
+def clustering_scenarios(problem, type):
+    n_scenarios = problem.k
+    for i in range()
     if type == 'kmeans':
         clustering = KMeans(n_clusters=n_cluster, random_state=0).fit(problem.clust_vars)
     elif type == 'hierarchical':
@@ -86,6 +89,11 @@ def dropout_cut(problem, type, n_cluster):
         curr_time = time.time()
         if curr_time - t1 >= 300:
             status = "timelimit"
+            break
+        if primal_gap_perc < 0.000001:
+            status = "optimal"
+            primal_gap = 0
+            primal_gap_perc = 0
             break
         n_iters = n_iters + 1
         cut_found = False
