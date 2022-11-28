@@ -93,7 +93,7 @@ class StochasticBinPackerGenerator:
         A2 = s2_problem.getA().toarray().astype(np.float32)
 
         c1 = np.array(s1_problem.getAttr('Obj', s1_problem.getVars()))
-        c2 = np.array(s1_problem.getAttr('Obj', s1_problem.getVars())) / 2
+        c2 = np.array(s2_problem.getAttr('Obj', s2_problem.getVars()))
         bounds = (np.sum(c2) * -5000, np.sum(c2) * 5000)
         b1 = np.array(s1_problem.getAttr('RHS', s1_problem.getConstrs()))
         b2 = np.array(s2_problem.getAttr('RHS', s2_problem.getConstrs()))
@@ -130,30 +130,15 @@ class StochasticBinPackerGenerator:
                         s1_problem.modelSense, s2_problem.modelSense, bounds, distribution=distribution,
                         other_info=other_info)
 
-    def batch_generator(self, distributions, n1_range, n2_range, k_range):
-        n_instances = len(distributions) * len(n1_range) * len(n2_range) * len(k_range)
+    def batch_generator(self):
+        n_instances = 3 * 3 * 3 * 4
         print(f"Generating {n_instances} instances")
-        configs = [None] * n_instances
-        count = 0
-        for dist in distributions:  # 4
-            for n1 in n1_range:  # 50 100, 150, 200
-                for n2 in n2_range:  # 50, 100, 150, 200
-                    for k in k_range:  # 100, 200, 300 ,400
-                        configs[count] = {
-                            "dist": dist,
-                            "n1": n1,
-                            "n2": n2,
-                            "m1": n1 * 2,
-                            "m2": n2 * 2,
-                            "k": k,
-                            "distribution": dist
-                        }
-                        count = count + 1
         instance_list = [None] * n_instances
-
-        for i in trange(len(configs)):
-            config = configs[i]
-            instance_list[i] = self.generate_problem(config['n1'], config['n2'],
-                                                     config['m1'], config['m2'],
-                                                     config['k'], config['distribution'])
-        return instance_list, configs
+        count = 0
+        for dist in ["multipeak","normal","uniform"]:  # 3
+            for n1 in [100, 150, 200]:  # 50 100, 150, 200
+                for n2 in [100, 150, 200]:  # 50, 100, 150, 200
+                    for k in [100,200,300,400]:  # 100, 200, 300 ,400
+                        instance_list[count] = self.generate_problem(n1, n2, n1 * 2, n2 * 2, k, dist)
+                        count = count + 1
+        return instance_list
