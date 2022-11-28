@@ -41,6 +41,20 @@ def clustering_scenarios(problem, method, n_cluster, multi=True):
             label_dic[label[i]].append(i)
 
     n_label = int(max(label_dic.keys()) + 1)
+    
+    q_dict = {}
+    W_dict = {}
+    h_dict = {}
+    T_dict = {}
+    max_range = 0
+    for key, value in label_dic.items():
+        if max_range < len(value) + 1:
+            max_range = len(value) + 1
+        q_dict[key] = np.array(problem.q_list)[value]
+        W_dict[key] = np.array(problem.W_list)[value]
+        h_dict[key] = np.array(problem.h_list)[value]
+        T_dict[key] = np.array(problem.T_list)[value]
+    return q_dict, W_dict, h_dict, T_dict, n_label, max_range
 
     if multi:
         q_list = []
@@ -76,17 +90,26 @@ def dropout_cut(problem, type, n_cluster):
     MP = gp.Model("MP")
     MP.Params.outputFlag = 0
 
-    q_list, W_list, h_list, T_list, k = clustering_scenarios(problem, type, n_cluster)
+    q_dict, W_dict, h_dict, T_dict, n_label, _ = clustering_scenarios(problem, type, n_cluster)
+    p = []
+    q_cluster, W_cluster, h_cluster, T_cluster = [], [], [], []
+    for i in range(n_label):
+        p.append([len(q_dict[i])])
+        q_cluster.append(q_dict[i][0])
+        W_cluster.append(W_dict[i][0])
+        h_cluster.append(h_dict[i][0])
+        T_cluster.append(T_dict[i][0])
+
 
     x = MP.addMVar((problem.s1_n_var,), name="x")
-    eta = MP.addMVar((k,), name="eta", ub=problem.eta_bounds[1], lb=problem.eta_bounds[0])
+    eta = MP.addMVar((n_label,), name="eta", ub=problem.eta_bounds[1], lb=problem.eta_bounds[0])
     if problem.s1_direction == GRB.MAXIMIZE:
         MP.modelSense = GRB.MAXIMIZE
     else:
         MP.modelSense = GRB.MINIMIZE
 
     MP.setObjective(
-        problem.c @ x + np.array([1 / k] * k) @ eta
+        problem.c @ x + p @ eta
     )
 
     c1 = MP.addConstr(
@@ -107,6 +130,11 @@ def dropout_cut(problem, type, n_cluster):
         if curr_time - t1 >= 300:
             status = "timelimit"
             break
+        if primal_gap_perc < 0.000001:
+            status = "optimal"
+            primal_gap = 0
+            primal_gap_perc = 0
+            break
         n_iters = n_iters + 1
         cut_found = False
         MP.update()
@@ -119,24 +147,24 @@ def dropout_cut(problem, type, n_cluster):
         LB = problem.c @ x_i
         eta_i = eta.x
         t_bl_1 = time.time()
-        for s in range(k):
+        for s in range(n_label):
             SP = gp.Model("SP")
             SP.Params.outputFlag = 0  # turn off output
             SP.Params.method = 1  # dual simplex
-            y = SP.addMVar((problem.s2_n_var,), name="y", obj=problem.q_list[s])
+            y = SP.addMVar((problem.s2_n_var,), name="y", obj=q_cluster[s])
             SP.modelSense = problem.s2_direction
             res = SP.addConstr(
-                W_list[s] @ y <= h_list[s] - (T_list[s] @ x_i)
+                W_cluster[s] @ y <= h_cluster[s] - (T_cluster[s] @ x_i)
             )
             SP.optimize()
             Q = SP.ObjVal
             pi = res.Pi
-            LB = LB + Q / k
+            LB = LB + Q * p[s]
             if np.abs(Q - eta_i[s]) > 0.00001:
                 if Q < eta_i[s]:
                     cut_found = True
-                    p1 = pi @ h_list[s]
-                    p2 = pi @ T_list[s]
+                    p1 = pi @ h_cluster[s]
+                    p2 = pi @ T_cluster[s]
                     MP.addConstr(
                         eta[s] <= p1 - gp.quicksum(p2[a] * x[a] for a in range(problem.s1_n_var))
                     )
@@ -156,7 +184,7 @@ def dropout_cut(problem, type, n_cluster):
         "avg_benders_loop_solve": BL_solve_time / n_iters,
         "status": status,
         "primal_gap": UB - highest_LB,
-        "primal_gap_perc": (UB - highest_LB) / UB,
+        "primal_gap_perc": (UB - LB) / UB,
         "runtime": elapsed_time,
         "n1": problem.s1_n_var,
         "n2": problem.s2_n_var,
@@ -262,8 +290,8 @@ def hybrid(problem, type, n_cluster):
         "avg_mp_solve": MP_solve_time / n_iters,
         "avg_benders_loop_solve": BL_solve_time / n_iters,
         "status": status,
-        "primal_gap": highest_LB - UB,
-        "primal_gap_perc": (UB - highest_LB) / UB,
+        "primal_gap": UB - LB,
+        "primal_gap_perc": (UB - LB) / UB,
         "runtime": elapsed_time,
         "n1": problem.s1_n_var,
         "n2": problem.s2_n_var,
