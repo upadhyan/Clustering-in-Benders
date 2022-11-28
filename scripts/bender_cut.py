@@ -2,6 +2,8 @@ from sklearn.cluster import SpectralClustering, KMeans, AffinityPropagation, Agg
 import numpy as np
 import gurobipy as gp
 from gurobipy import GRB
+import time
+import gc
 
 def clustering_scenarios(problem, type, n_cluster, multi = True):
     if type == 'kmeans':
@@ -137,138 +139,107 @@ def dropout_multicut(problem, type, n_cluster):
 
 
 
-def single_cut(problem):
-    MP = gp.Model("MP")
-    MP.Params.outputFlag = 0
-
-    x = MP.addMVar((problem.s1_n_var,), name = "x")
-    theta = MP.addMVar(1, name = "theta", ub = problem.eta_bounds[1] * problem.k, lb = problem.eta_bounds[0] * problem.k)
-
-    if problem.s1_direction == GRB.MAXIMIZE:
-        MP.modelSense = GRB.MAXIMIZE
-    else:
-        MP.modelSense = GRB.MINIMIZE
-
-    MP.setObjective(
-        problem.c @ x + theta 
-    )
-
-    c1 = MP.addConstr(
-        problem.A @ x <= problem.b
-    )
-
-
-    cut_found = True
-    n_iters = 0
-    try: 
-        while cut_found:
-            cut_found = False
-            q_vals = []
-            if n_iters < 200:
-                n_iters = n_iters + 1
-                print(f"On Iteration: {n_iters}")
-            else:
-                break
-            MP.update()
-            MP.optimize()
-            LB = 0
-            x_i = x.x
-            theta = theta.x
-            p1 = 0
-            p2 = 0
-            for s in range(problem.k):
-                SP = gp.Model("SP")
-                SP.Params.outputFlag = 0  # turn off output
-                SP.Params.method = 1      # dual simplex
-                y = SP.addMVar((problem.s2_n_var,), name = "y", obj = problem.q_list[s])
-                if problem.s2_direction == GRB.MAXIMIZE:
-                    SP.modelSense = GRB.MAXIMIZE
-                else:
-                    SP.modelSense = GRB.MINIMIZE
-                res = SP.addConstr(
-                    problem.W_list[s] @ y <= problem.h_list[s] - (problem.T_list[s] @ x_i)
-                )
-                SP.optimize()
-                Q = SP.ObjVal
-                q_vals.append(Q)
-                pi = res.Pi
-                p1 = p1 + pi @ problem.h_list[s] / problem.k
-                p2 = p2 + pi @ problem.T_list[s] / problem.k
-                LB = LB + Q / problem.k
-            if np.abs(LB - theta) > 0.00001:
-                if LB < theta:
-                    cut_found = True
-                    MP.addConstr(theta + p2 @ x <= p1)
-            if(LB > BestLB):
-                BestLB = LB        
-            print(f"Iteration {n_iters}: LB = {BestLB}. UB = {MP.ObjVal}")
-    except:
-        print(f"Errored out on iteration: {n_iters} scenario {s}")
-
-
-
 def hybrid(problem, type, n_cluster):
     MP = gp.Model("MP")
     MP.Params.outputFlag = 0
-    x = MP.addMVar((problem.s1_n_var,), name = "x")
 
     q_dict, W_dict, h_dict, T_dict, n_label, max_range = clustering_scenarios(problem, type, n_cluster, multi = False)
 
+    x = MP.addMVar((problem.s1_n_var,), name="x")
     theta = MP.addMVar((n_label,), name = "theta", ub = problem.eta_bounds[1] * max_range, lb = problem.eta_bounds[0] * max_range)
-
     if problem.s1_direction == GRB.MAXIMIZE:
         MP.modelSense = GRB.MAXIMIZE
     else:
         MP.modelSense = GRB.MINIMIZE
 
     MP.setObjective(
-        problem.c @ x + theta 
+        problem.c @ x + np.array([1/n_label] * n_label) @ theta 
     )
 
     c1 = MP.addConstr(
         problem.A @ x <= problem.b
     )
-
-
     cut_found = True
     n_iters = 0
-    try: 
-        while cut_found:
-            cut_found = False
-            q_vals = []
-            n_iters = n_iters + 1
-            print(f"On Iteration: {n_iters}")
-            MP.update()
-            MP.optimize()
-            LB = 0
-            x_i = x.x
-            theta_i = theta.x
+    n_cuts = 0
+    MP_solve_time = 0
+    BL_solve_time = 0
+    status = "optimal"
+    highest_LB = 0
+    UB = np.abs(problem.eta_bounds[0]) * 10000
+    t1 = time.time()
+    
+    while cut_found:
+        gc.collect()
+        curr_time = time.time()
+        if curr_time - t1 >= 300:
+            status = "timelimit"
+            break
+        n_iters = n_iters + 1
+        cut_found = False
+        MP.update()
+        t_mp_1 = time.time()
+        MP.optimize()
+        t_mp_2 = time.time()
+        MP_solve_time = MP_solve_time + t_mp_2 - t_mp_1
+        UB = MP.ObjVal
+        x_i = x.x
+        LB = problem.c @ x_i
+        theta_i = theta.x
+        t_bl_1 = time.time()
+        sub_problem_lst = []
+        for i in range(n_label):
+            q_list, W_list, h_list, T_list = q_dict[i], W_dict[i], h_dict[i], T_dict[i]
+            n_scenarios = len(q_list)
             p1 = 0
             p2 = 0
-            for s in range(problem.k):
+            sub_problem = 0
+            for s in range(n_scenarios):
                 SP = gp.Model("SP")
                 SP.Params.outputFlag = 0  # turn off output
-                SP.Params.method = 1      # dual simplex
-                y = SP.addMVar((problem.s2_n_var,), name = "y", obj = problem.q_list[s])
-                if problem.s2_direction == GRB.MAXIMIZE:
-                    SP.modelSense = GRB.MAXIMIZE
-                else:
-                    SP.modelSense = GRB.MINIMIZE
+                SP.Params.method = 1  # dual simplex
+                y = SP.addMVar((problem.s2_n_var,), name="y", obj=q_list[s])
+                SP.modelSense = problem.s2_direction
                 res = SP.addConstr(
-                    problem.W_list[s] @ y <= problem.h_list[s] - (problem.T_list[s] @ x_i)
+                    W_list[s] @ y <= h_list[s] - (T_list[s] @ x_i)
                 )
                 SP.optimize()
                 Q = SP.ObjVal
-                q_vals.append(Q)
-                pi = res.Pi
-                p1 = p1 + pi @ problem.h_list[s] / problem.k
-                p2 = p2 + pi @ problem.h_list[s] / problem.k
-                LB = LB + Q / problem.k
-                if np.abs(Q - theta_i) > 0.00001:
-                    if Q < theta_i[s]:
-                        cut_found = True
-                        MP.addConstr(theta - p2 @ x <= p1)
-            print(f"Iteration {n_iters}: LB = {LB}. UB = {MP.ObjVal}")
-    except:
-        print(f"Errored out on iteration: {n_iters} scenario {s}")
-
+                pi_k = res.Pi
+                sub_problem = sub_problem + Q / n_scenarios
+                p1 = p1 + pi_k @ h_list[s] / n_scenarios
+                p2 = p2 + pi_k @ T_list[s] / n_scenarios
+            sub_problem_lst.append(sub_problem)
+            if np.abs(sub_problem - theta_i[i]) > 0.00001:
+                if sub_problem < theta_i[i]:
+                    cut_found = True
+                    MP.addConstr(
+                        theta[i] <= p1 - gp.quicksum(p2[a] * x[a] for a in range(problem.s1_n_var))
+                    )
+                    n_cuts = n_cuts + 1
+        LB = LB + sum(sub_problem_lst)
+        t_bl_2 = time.time()
+        BL_solve_time = BL_solve_time + t_bl_2 - t_bl_1
+        if LB > highest_LB:
+            highest_LB = LB
+    t2 = time.time()
+    elapsed_time = t2 - t1
+    results = {
+        "method": "hybrid-cut",
+        "obj_val": MP.ObjVal,
+        "n_cuts": n_cuts,
+        "n_iterations": n_iters,
+        "avg_mp_solve": MP_solve_time / n_iters,
+        "avg_benders_loop_solve": BL_solve_time / n_iters,
+        "status": status,
+        "primal_gap": highest_LB - UB,
+        "primal_gap_perc": (UB - highest_LB) / UB,
+        "runtime": elapsed_time,
+        "n1": problem.s1_n_var,
+        "n2": problem.s2_n_var,
+        "m1": problem.s1_n_constr,
+        "m2": problem.s2_n_constr,
+        "k": problem.k,
+        "distribution": problem.distribution
+    }
+    return results
