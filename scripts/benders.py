@@ -234,7 +234,6 @@ def clustering_scenarios(problem, method, multi=True):
     if method == 'kmeans':
         labels = [KMeans(n_clusters=n).fit_predict(problem.clust_vars) for n in n_clust]
         scores = [silhouette_score(problem.clust_vars, label) for label in labels]
-        # clustering = KMeans(n_clusters=n_cluster, random_state=0).fit(problem.clust_vars)
     elif method == 'hierarchical':
         labels = [AgglomerativeClustering(n_clusters=n).fit_predict(problem.clust_vars) for n in n_clust]
         scores = [silhouette_score(problem.clust_vars, label) for label in labels]
@@ -243,12 +242,9 @@ def clustering_scenarios(problem, method, multi=True):
             SpectralClustering(n_clusters=n, assign_labels='cluster_qr', random_state=0).fit_predict(problem.clust_vars)
             for n in n_clust]
         scores = [silhouette_score(problem.clust_vars, label) for label in labels]
-        # clustering = SpectralClustering(n_clusters=n_cluster, assign_labels='cluster_qr', random_state=0).fit(
-        #    problem.clust_vars)
     elif method == 'affinity':
         labels = [AffinityPropagation(random_state=0).fit_predict(problem.clust_vars)]
         scores = [12]
-        # clustering = AffinityPropagation(random_state=0).fit(problem.clust_vars)
     else:
         raise ValueError("clustering type not given")
 
@@ -408,8 +404,8 @@ def hybrid(problem, method):
     p = np.array(p)
 
     x = MP.addMVar((problem.s1_n_var,), name="x")
-    theta = MP.addMVar((n_label,), name="theta", ub=problem.eta_bounds[1] * max_range,
-                       lb=problem.eta_bounds[0] * max_range)
+    theta = MP.addMVar((n_label,), name="theta", ub=problem.eta_bounds[1],
+                       lb=problem.eta_bounds[0])
     if problem.s1_direction == GRB.MAXIMIZE:
         MP.modelSense = GRB.MAXIMIZE
     else:
