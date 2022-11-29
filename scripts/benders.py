@@ -128,7 +128,7 @@ def single_cut(problem):
     MP = gp.Model("MP")
     MP.Params.outputFlag = 0
     x = MP.addMVar((problem.s1_n_var,), name="x")
-    theta = MP.addMVar((1,), name="eta", ub=problem.eta_bounds[1] * problem.k, lb=problem.eta_bounds[0] * problem.k)
+    theta = MP.addMVar((1,), name="eta", ub=problem.eta_bounds[1], lb=problem.eta_bounds[0])
     MP.modelSense = problem.s1_direction
     MP.setObjective(
         problem.c @ x + theta
