@@ -5,6 +5,7 @@ import gurobipy as gp
 from gurobipy import GRB
 import numpy as np
 import time
+from sklearn.decomposition import PCA
 
 
 def evaluate_solution(problem, x):
@@ -228,50 +229,69 @@ def single_cut(problem):
     return results
 
 
-def clustering_scenarios(problem, method, multi=True):
+def clustering_scenarios(problem, method, dr=True):
     k = problem.k
-    n_clust = [int(k * x / 100) for x in range(5, 15 + 1)]
+    if dr:
+        cvar = PCA(n_components=20).fit_transform(problem.clust_vars)
+    else:
+        cvar = problem.clust_vars
+    n_clust = [int(k * x / 100) for x in range(5, 16)]
     if method == 'kmeans':
-        labels = [KMeans(n_clusters=n).fit_predict(problem.clust_vars) for n in n_clust]
-        scores = [silhouette_score(problem.clust_vars, label) for label in labels]
+        labels = [KMeans(n_clusters=n).fit_predict(cvar) for n in n_clust]
+        scores = [silhouette_score(cvar, label) for label in labels]
     elif method == 'hierarchical':
-        labels = [AgglomerativeClustering(n_clusters=n).fit_predict(problem.clust_vars) for n in n_clust]
-        scores = [silhouette_score(problem.clust_vars, label) for label in labels]
+        labels = [AgglomerativeClustering(n_clusters=n).fit_predict(cvar) for n in n_clust]
+        scores = [silhouette_score(cvar, label) for label in labels]
     elif method == 'spectral':
         labels = [
-            SpectralClustering(n_clusters=n, assign_labels='cluster_qr', random_state=0).fit_predict(problem.clust_vars)
+            SpectralClustering(n_clusters=n, assign_labels='cluster_qr', random_state=0).fit_predict(cvar)
             for n in n_clust]
-        scores = [silhouette_score(problem.clust_vars, label) for label in labels]
+        scores = [silhouette_score(cvar, label) for label in labels]
     elif method == 'affinity':
-        labels = [AffinityPropagation(random_state=0).fit_predict(problem.clust_vars)]
+        labels = [AffinityPropagation(random_state=0).fit_predict(cvar)]
+        scores = [12]
+    elif method == 'random':
+        n_clust = int(k * 10 / 100)
+        labels = [np.random.randint(0, n_clust, problem.k)]
         scores = [12]
     else:
         raise ValueError("clustering type not given")
 
-    label = labels[np.argmin(np.argmin(scores))]
-
+    label = labels[np.argmax(np.argmin(scores))]
+    unique_labels = np.unique(label)
     label_dic = {}
+    for l in unique_labels:
+        label_dic[l] = []
+
+    for i, label in enumerate(label):
+        label_dic[label].append(i)
+    """
     for i in range(len(label)):
         if label[i] not in label_dic.keys():
             label_dic[label[i]] = [i]
         else:
             label_dic[label[i]].append(i)
-
+    """
     n_label = int(max(label_dic.keys()) + 1)
 
     q_dict = {}
     W_dict = {}
     h_dict = {}
     T_dict = {}
+    representative_scenarios = {}
     max_range = 0
     for key, value in label_dic.items():
-        if max_range < len(value) + 1:
-            max_range = len(value) + 1
         q_dict[key] = np.array(problem.q_list)[value]
         W_dict[key] = np.array(problem.W_list)[value]
         h_dict[key] = np.array(problem.h_list)[value]
         T_dict[key] = np.array(problem.T_list)[value]
-    return q_dict, W_dict, h_dict, T_dict, n_label, max_range
+        rel_cvar = np.array(cvar)[value]
+        col_means = np.mean(rel_cvar, axis=0)
+        dist_vector = [0] * len(value)
+        for i in range(len(value)):
+            dist_vector[i] = np.linalg.norm(rel_cvar[i] - col_means)
+        representative_scenarios[key] = np.argmin(dist_vector)
+    return q_dict, W_dict, h_dict, T_dict, n_label, representative_scenarios
 
 
 def dropout_cut(problem, method):
@@ -279,15 +299,16 @@ def dropout_cut(problem, method):
     MP.Params.outputFlag = 0
     t1 = time.time()
 
-    q_dict, W_dict, h_dict, T_dict, n_label, _ = clustering_scenarios(problem, method)
+    q_dict, W_dict, h_dict, T_dict, n_label, representative_scenarios = clustering_scenarios(problem, method)
     p = []
     q_cluster, W_cluster, h_cluster, T_cluster = [], [], [], []
     for i in range(n_label):
+        r = representative_scenarios[i]
         p.append(len(q_dict[i]) / problem.k)
-        q_cluster.append(q_dict[i][0])
-        W_cluster.append(W_dict[i][0])
-        h_cluster.append(h_dict[i][0])
-        T_cluster.append(T_dict[i][0])
+        q_cluster.append(q_dict[i][r])
+        W_cluster.append(W_dict[i][r])
+        h_cluster.append(h_dict[i][r])
+        T_cluster.append(T_dict[i][r])
 
     p = np.array(p)
     q_cluster = np.array(q_cluster)
@@ -393,11 +414,11 @@ def dropout_cut(problem, method):
     return results
 
 
-def hybrid(problem, method):
+def hybrid(problem, method, dr=False):
     MP = gp.Model("MP")
     MP.Params.outputFlag = 0
     t1 = time.time()
-    q_dict, W_dict, h_dict, T_dict, n_label, max_range = clustering_scenarios(problem, method)
+    q_dict, W_dict, h_dict, T_dict, n_label, max_range = clustering_scenarios(problem, method, dr=dr)
     p = []
     for i in range(n_label):
         p.append(len(q_dict[i]) / problem.k)
@@ -492,7 +513,7 @@ def hybrid(problem, method):
     t2 = time.time()
     elapsed_time = t2 - t1
     results = {
-        "method": f"{method}-hybrid-cut",
+        "method": f"{method}-hybrid-cut-{dr}",
         "obj_val": evaluate_solution(problem, x.x),
         "n_cuts": n_cuts,
         "n_iterations": n_iters,
