@@ -6,7 +6,7 @@ from gurobipy import GRB
 import numpy as np
 import time
 from sklearn.decomposition import PCA
-
+from scipy.spatial import distance
 
 def evaluate_solution(problem, x):
     obj_val = problem.c @ x
@@ -51,6 +51,15 @@ def multi_cut(problem):
     LB = 0
     primal_gap_perc = 1
     primal_gap = UB - LB
+    SP = gp.Model("SP")
+    SP.Params.outputFlag = 0  # turn off output
+    SP.Params.method = 1  # dual simplex
+    y = SP.addMVar((problem.s2_n_var,), name="y", obj=problem.q_list[0])
+    SP.modelSense = problem.s2_direction
+    x_i = np.zeros(problem.s1_n_var)
+    res = SP.addConstr(
+        problem.W_list[0] @ y <= problem.h_list[0] - (problem.T_list[0] @ x_i)
+    )
     while cut_found:
         gc.collect()
         curr_time = time.time()
@@ -75,14 +84,9 @@ def multi_cut(problem):
         eta_i = eta.x
         t_bl_1 = time.time()
         for s in range(problem.k):
-            SP = gp.Model("SP")
-            SP.Params.outputFlag = 0  # turn off output
-            SP.Params.method = 1  # dual simplex
-            y = SP.addMVar((problem.s2_n_var,), name="y", obj=problem.q_list[s])
-            SP.modelSense = problem.s2_direction
-            res = SP.addConstr(
-                problem.W_list[s] @ y <= problem.h_list[s] - (problem.T_list[s] @ x_i)
-            )
+            RHS = problem.h_list[s] - (problem.T_list[s] @ x_i)
+            res.rhs = RHS
+            SP.update()
             SP.optimize()
             Q = SP.ObjVal
             pi = res.Pi
@@ -151,6 +155,15 @@ def single_cut(problem):
     LB = 0
     primal_gap = UB - highest_LB
     primal_gap_perc = primal_gap / UB
+
+    SP = gp.Model("SP")
+    SP.Params.outputFlag = 0  # turn off output
+    SP.Params.method = 1  # dual simplex
+    y = SP.addMVar((problem.s2_n_var,), name="y", obj=problem.q_list[0])
+    SP.modelSense = problem.s2_direction
+    res = SP.addConstr(
+        problem.W_list[0] @ y <= np.zeros(problem.s2_n_constr)
+    )
     while cut_found:
         gc.collect()
         curr_time = time.time()
@@ -178,14 +191,8 @@ def single_cut(problem):
         p2 = np.zeros(problem.s1_n_var)
         sub_problem = 0
         for s in range(problem.k):
-            SP = gp.Model("SP")
-            SP.Params.outputFlag = 0  # turn off output
-            SP.Params.method = 1  # dual simplex
-            y = SP.addMVar((problem.s2_n_var,), name="y", obj=problem.q_list[s])
-            SP.modelSense = problem.s2_direction
-            res = SP.addConstr(
-                problem.W_list[s] @ y <= problem.h_list[s] - (problem.T_list[s] @ x_i)
-            )
+            RHS = problem.h_list[s] - (problem.T_list[s] @ x_i)
+            res.rhs = RHS
             SP.optimize()
             Q = SP.ObjVal
             pi_k = res.Pi
@@ -251,7 +258,7 @@ def clustering_scenarios(problem, method, dr=True):
         labels = [AffinityPropagation(random_state=0).fit_predict(cvar)]
         scores = [12]
     elif method == 'random':
-        n_clust = int(k * 10 / 100)
+        n_clust = int(k * 5 / 100)
         labels = [np.random.randint(0, n_clust, problem.k)]
         scores = [12]
     else:
@@ -294,12 +301,12 @@ def clustering_scenarios(problem, method, dr=True):
     return q_dict, W_dict, h_dict, T_dict, n_label, representative_scenarios
 
 
-def dropout_cut(problem, method):
+def dropout_cut(problem, method, dr=False):
     MP = gp.Model("MP")
     MP.Params.outputFlag = 0
     t1 = time.time()
 
-    q_dict, W_dict, h_dict, T_dict, n_label, representative_scenarios = clustering_scenarios(problem, method)
+    q_dict, W_dict, h_dict, T_dict, n_label, representative_scenarios = clustering_scenarios(problem, method, dr=dr)
     p = []
     q_cluster, W_cluster, h_cluster, T_cluster = [], [], [], []
     for i in range(n_label):
@@ -340,6 +347,14 @@ def dropout_cut(problem, method):
     UB = np.abs(problem.eta_bounds[0]) * 10000
     primal_gap = UB - highest_LB
     primal_gap_perc = primal_gap / UB
+    SP = gp.Model("SP")
+    SP.Params.outputFlag = 0  # turn off output
+    SP.Params.method = 1  # dual simplex
+    y = SP.addMVar((problem.s2_n_var,), name="y", obj=q_cluster[0])
+    SP.modelSense = problem.s2_direction
+    res = SP.addConstr(
+        W_cluster[0] @ y <= np.zeros(problem.s2_n_constr)
+    )
     while cut_found:
         gc.collect()
         curr_time = time.time()
@@ -364,14 +379,9 @@ def dropout_cut(problem, method):
         eta_i = eta.x
         t_bl_1 = time.time()
         for s in range(n_label):
-            SP = gp.Model("SP")
-            SP.Params.outputFlag = 0  # turn off output
-            SP.Params.method = 1  # dual simplex
-            y = SP.addMVar((problem.s2_n_var,), name="y", obj=q_cluster[s])
-            SP.modelSense = problem.s2_direction
-            res = SP.addConstr(
-                W_cluster[s] @ y <= h_cluster[s] - (T_cluster[s] @ x_i)
-            )
+            RHS = h_cluster[s] - (T_cluster[s] @ x_i)
+            res.rhs = RHS
+            SP.update()
             SP.optimize()
             Q = SP.ObjVal
             pi = res.Pi
@@ -394,7 +404,7 @@ def dropout_cut(problem, method):
     t2 = time.time()
     elapsed_time = t2 - t1
     results = {
-        "method": f"{method}-ND-dropout",
+        "method": f"{method}-ND-dropout-{dr}",
         "obj_val": evaluate_solution(problem, x.x),
         "n_cuts": n_cuts,
         "n_iterations": n_iters,
@@ -449,7 +459,14 @@ def hybrid(problem, method, dr=False):
     UB = np.abs(problem.eta_bounds[0]) * 10000
     primal_gap = UB - highest_LB
     primal_gap_perc = primal_gap / UB
-
+    SP = gp.Model("SP")
+    SP.Params.outputFlag = 0  # turn off output
+    SP.Params.method = 1  # dual simplex
+    y = SP.addMVar((problem.s2_n_var,), name="y", obj=problem.q_list[0])
+    SP.modelSense = problem.s2_direction
+    res = SP.addConstr(
+        problem.W_list[0] @ y <= np.zeros(problem.s2_n_constr)
+    )
     while cut_found:
         gc.collect()
         curr_time = time.time()
@@ -481,14 +498,8 @@ def hybrid(problem, method, dr=False):
             p2 = 0
             sub_problem = 0
             for s in range(n_scenarios):
-                SP = gp.Model("SP")
-                SP.Params.outputFlag = 0  # turn off output
-                SP.Params.method = 1  # dual simplex
-                y = SP.addMVar((problem.s2_n_var,), name="y", obj=q_list[s])
-                SP.modelSense = problem.s2_direction
-                res = SP.addConstr(
-                    W_list[s] @ y <= h_list[s] - (T_list[s] @ x_i)
-                )
+                RHS = h_list[s] - (T_list[s] @ x_i)
+                res.rhs = RHS
                 SP.optimize()
                 Q = SP.ObjVal
                 pi_k = res.Pi
