@@ -8,6 +8,7 @@ import time
 from sklearn.decomposition import PCA
 from scipy.spatial import distance
 
+
 def evaluate_solution(problem, x):
     obj_val = problem.c @ x
     p = [1 / problem.k] * problem.k
@@ -109,8 +110,10 @@ def multi_cut(problem):
     t2 = time.time()
     elapsed_time = t2 - t1
     results = {
-        "method": "multi-cut",
+        "grouping_method": f"None",
         "obj_val": evaluate_solution(problem, x.x),
+        "dr":"None",
+        "cut_method": "multi",
         "n_cuts": n_cuts,
         "n_iterations": n_iters,
         "avg_mp_solve": MP_solve_time / n_iters,
@@ -124,7 +127,8 @@ def multi_cut(problem):
         "m1": problem.s1_n_constr,
         "m2": problem.s2_n_constr,
         "k": problem.k,
-        "distribution": problem.distribution
+        "distribution": problem.distribution,
+        "clustering_runtime": 0
     }
     return results
 
@@ -216,8 +220,10 @@ def single_cut(problem):
     t2 = time.time()
     elapsed_time = t2 - t1
     results = {
-        "method": "single-cut",
+        "grouping_method": f"None",
         "obj_val": evaluate_solution(problem, x.x),
+        "dr":"None",
+        "cut_method": "single",
         "n_cuts": n_cuts,
         "n_iterations": n_iters,
         "avg_mp_solve": MP_solve_time / n_iters,
@@ -231,7 +237,8 @@ def single_cut(problem):
         "m1": problem.s1_n_constr,
         "m2": problem.s2_n_constr,
         "k": problem.k,
-        "distribution": problem.distribution
+        "distribution": problem.distribution,
+        "clustering_runtime": 0
     }
     return results
 
@@ -239,10 +246,10 @@ def single_cut(problem):
 def clustering_scenarios(problem, method, dr=True):
     k = problem.k
     if dr:
-        cvar = PCA(n_components=20).fit_transform(problem.clust_vars)
+        cvar = PCA(n_components=10).fit_transform(problem.clust_vars)
     else:
         cvar = problem.clust_vars
-    n_clust = [int(k * x / 100) for x in range(5, 16)]
+    n_clust = [int(k * x / 100) for x in range(2, 21)]
     if method == 'kmeans':
         labels = [KMeans(n_clusters=n).fit_predict(cvar) for n in n_clust]
         scores = [silhouette_score(cvar, label) for label in labels]
@@ -258,7 +265,8 @@ def clustering_scenarios(problem, method, dr=True):
         labels = [AffinityPropagation(random_state=0).fit_predict(cvar)]
         scores = [12]
     elif method == 'random':
-        n_clust = int(k * 5 / 100)
+        n_clust = (np.random.randint(2, 21) * k / 100)
+        # n_clust = int(5 * k / 100)
         labels = [np.random.randint(0, n_clust, problem.k)]
         scores = [12]
     else:
@@ -272,13 +280,6 @@ def clustering_scenarios(problem, method, dr=True):
 
     for i, label in enumerate(label):
         label_dic[label].append(i)
-    """
-    for i in range(len(label)):
-        if label[i] not in label_dic.keys():
-            label_dic[label[i]] = [i]
-        else:
-            label_dic[label[i]].append(i)
-    """
     n_label = int(max(label_dic.keys()) + 1)
 
     q_dict = {}
@@ -305,8 +306,9 @@ def dropout_cut(problem, method, dr=False):
     MP = gp.Model("MP")
     MP.Params.outputFlag = 0
     t1 = time.time()
-
     q_dict, W_dict, h_dict, T_dict, n_label, representative_scenarios = clustering_scenarios(problem, method, dr=dr)
+    tclust = time.time()
+    clustering_runtime = tclust - t1
     p = []
     q_cluster, W_cluster, h_cluster, T_cluster = [], [], [], []
     for i in range(n_label):
@@ -404,8 +406,10 @@ def dropout_cut(problem, method, dr=False):
     t2 = time.time()
     elapsed_time = t2 - t1
     results = {
-        "method": f"{method}-ND-dropout-{dr}",
+        "grouping_method": f"{method}",
         "obj_val": evaluate_solution(problem, x.x),
+        "dr":dr,
+        "cut_method": "dropout",
         "n_cuts": n_cuts,
         "n_iterations": n_iters,
         "avg_mp_solve": MP_solve_time / n_iters,
@@ -419,7 +423,8 @@ def dropout_cut(problem, method, dr=False):
         "m1": problem.s1_n_constr,
         "m2": problem.s2_n_constr,
         "k": problem.k,
-        "distribution": problem.distribution
+        "distribution": problem.distribution,
+        "clustering_runtime": clustering_runtime
     }
     return results
 
@@ -429,6 +434,8 @@ def hybrid(problem, method, dr=False):
     MP.Params.outputFlag = 0
     t1 = time.time()
     q_dict, W_dict, h_dict, T_dict, n_label, max_range = clustering_scenarios(problem, method, dr=dr)
+    t_clust = time.time()
+    clustering_runtime = t_clust - t1
     p = []
     for i in range(n_label):
         p.append(len(q_dict[i]) / problem.k)
@@ -524,8 +531,10 @@ def hybrid(problem, method, dr=False):
     t2 = time.time()
     elapsed_time = t2 - t1
     results = {
-        "method": f"{method}-hybrid-cut-{dr}",
+        "grouping_method": f"{method}",
         "obj_val": evaluate_solution(problem, x.x),
+        "dr":dr,
+        "cut_method": "hybrid",
         "n_cuts": n_cuts,
         "n_iterations": n_iters,
         "avg_mp_solve": MP_solve_time / n_iters,
@@ -539,6 +548,7 @@ def hybrid(problem, method, dr=False):
         "m1": problem.s1_n_constr,
         "m2": problem.s2_n_constr,
         "k": problem.k,
-        "distribution": problem.distribution
+        "distribution": problem.distribution,
+        "clustering_runtime": clustering_runtime
     }
     return results

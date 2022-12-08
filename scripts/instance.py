@@ -11,6 +11,7 @@ from pandas_datareader import data, wb
 from datetime import date
 import random
 from tqdm.notebook import trange
+from sklearn.preprocessing import MinMaxScaler
 
 
 class Instance:
@@ -43,7 +44,7 @@ class StochasticBinPackerGenerator:
     def generate_uniform_stochastics(self, n1, n2, m2):
         h_vals = np.random.uniform(9 * n2, 10 * n2, m2)
         T_vals = np.random.uniform(5, 30, (m2, n1))
-        cluster_vals = np.sum(T_vals, axis=1) + h_vals
+        cluster_vals = MinMaxScaler().fit_transform(np.sum(T_vals, axis=1)) + MinMaxScaler().fit_transform(h_vals)
         T_vals = T_vals * -1
         return h_vals, T_vals, cluster_vals
 
@@ -52,7 +53,7 @@ class StochasticBinPackerGenerator:
         h_vals = np.clip(h_vals, 0, None)
         T_vals = np.random.normal(17, 5, (m2, n1))
         T_vals = np.clip(T_vals, 0, None)
-        cluster_vals = np.sum(T_vals, axis=1) + h_vals
+        cluster_vals = MinMaxScaler().fit_transform(np.sum(T_vals, axis=1)) + MinMaxScaler().fit_transform(h_vals)
         T_vals = T_vals * -1
         return h_vals, T_vals, cluster_vals
 
@@ -63,23 +64,23 @@ class StochasticBinPackerGenerator:
         scale = 17 / shape
         T_vals = np.random.gamma(shape, scale, (m2, n1))
         T_vals = np.clip(T_vals, 0, None)
-        cluster_vals = np.sum(T_vals, axis=1) + h_vals
+        cluster_vals = MinMaxScaler().fit_transform(np.sum(T_vals, axis=1)) + MinMaxScaler().fit_transform(h_vals)
         T_vals = T_vals * -1
         return h_vals, T_vals, cluster_vals
 
     def generate_multi_peak(self, n1, n2, m2):
         ratio_h = int(m2 * 0.5)
-        h_vals = np.concatenate((np.random.normal(7 * n2, n2, ratio_h),
-                                 np.random.normal(12 * n2, n2, m2 - ratio_h)))
+        h_vals = np.concatenate((np.random.normal(6 * n2, n2, ratio_h),
+                                 np.random.normal(13 * n2, n2, m2 - ratio_h)))
         np.random.shuffle(h_vals)
         h_vals = np.clip(h_vals, 0, None)
         t_size = m2 * n1
         ratio_t = int(t_size * 0.5)
-        T_vals = np.concatenate((np.random.normal(10, 5, ratio_t),
-                                 np.random.normal(24, 5, t_size - ratio_t)))
+        T_vals = np.concatenate((np.random.normal(9, 5, ratio_t),
+                                 np.random.normal(26, 5, t_size - ratio_t)))
         T_vals = np.clip(T_vals, 0, None)
         T_vals = np.reshape(T_vals, (m2, n1))
-        cluster_vals = np.sum(T_vals, axis=1) + h_vals
+        cluster_vals = MinMaxScaler().fit_transform(np.sum(T_vals, axis=1)) + MinMaxScaler().fit_transform(h_vals)
         T_vals = T_vals * -1
         return h_vals, T_vals, cluster_vals
 
@@ -130,14 +131,14 @@ class StochasticBinPackerGenerator:
                         s1_problem.modelSense, s2_problem.modelSense, bounds, distribution=distribution,
                         other_info=other_info)
 
-    def batch_generator(self):
-        n_instances = 3 * 4 * 4 * 4
+    def batch_generator(self, duplications=1):
+        n_instances = 3 * 4 * 4 * 4 * 4 * 4 * duplications
         print(f"Generating {n_instances} instances")
         instance_list = [None] * n_instances
         count = 0
         for dist in ["multipeak", "normal", "uniform"]:  # 3
-            for n1 in [50, 100, 150, 200]:  # 50 100, 150, 200
-                for n2 in [50, 100, 150, 200]:  # 50, 100, 150, 200
+            for n1 in [50, 125, 200]:  # 50 100, 150, 200
+                for n2 in [50, 125, 200]:  # 50, 100, 150, 200
                     for k in [100, 200, 300, 400]:  # 100, 200, 300 ,400
                         instance_list[count] = self.generate_problem(n1, n2, n1 * 2, n2 * 2, k, dist)
                         count = count + 1
