@@ -1,5 +1,6 @@
 .idea/
 .vscode/
+data/
 data/multipeak_100_200_100.pkl
 data/multipeak_100_200_200.pkl
 data/multipeak_100_200_300.pkl
