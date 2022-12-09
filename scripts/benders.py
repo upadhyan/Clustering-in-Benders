@@ -258,11 +258,11 @@ def clustering_scenarios(problem, method, dr=True):
         scores = [silhouette_score(cvar, label) for label in labels]
     elif method == 'spectral':
         labels = [
-            SpectralClustering(n_clusters=n, assign_labels='cluster_qr', random_state=0).fit_predict(cvar)
+            SpectralClustering(n_clusters=n, assign_labels='kmeans', random_state=0).fit_predict(cvar)
             for n in n_clust]
         scores = [silhouette_score(cvar, label) for label in labels]
     elif method == 'affinity':
-        labels = [AffinityPropagation(random_state=0).fit_predict(cvar)]
+        labels = [AffinityPropagation(max_iter=1000).fit_predict(cvar)]
         scores = [12]
     elif method == 'random':
         n_clust = (np.random.randint(2, 21) * k / 100)
@@ -271,7 +271,6 @@ def clustering_scenarios(problem, method, dr=True):
         scores = [12]
     else:
         raise ValueError("clustering type not given")
-
     label = labels[np.argmax(np.argmin(scores))]
     unique_labels = np.unique(label)
     label_dic = {}

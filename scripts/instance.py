@@ -45,9 +45,7 @@ class StochasticBinPackerGenerator:
         h_vals = np.random.uniform(9 * n2, 10 * n2, m2)
         T_vals = np.random.uniform(5, 30, (m2, n1))
         t_val_sum = np.sum(T_vals, axis=1)
-        t_val_sum = (t_val_sum - np.min(t_val_sum)) / (np.max(t_val_sum) - np.min(t_val_sum))
-        h_val_scale = (h_vals - np.min(h_vals)) / (np.max(h_vals) - np.min(h_vals))
-        cluster_vals = t_val_sum + h_val_scale
+        cluster_vals = t_val_sum + h_vals
         T_vals = T_vals * -1
         return h_vals, T_vals, cluster_vals
 
@@ -57,9 +55,7 @@ class StochasticBinPackerGenerator:
         T_vals = np.random.normal(17, 5, (m2, n1))
         T_vals = np.clip(T_vals, 0, None)
         t_val_sum = np.sum(T_vals, axis=1)
-        t_val_sum = (t_val_sum - np.min(t_val_sum)) / (np.max(t_val_sum) - np.min(t_val_sum))
-        h_val_scale = (h_vals - np.min(h_vals)) / (np.max(h_vals) - np.min(h_vals))
-        cluster_vals = t_val_sum + h_val_scale
+        cluster_vals = t_val_sum + h_vals
         T_vals = T_vals * -1
         return h_vals, T_vals, cluster_vals
 
@@ -71,9 +67,7 @@ class StochasticBinPackerGenerator:
         T_vals = np.random.gamma(shape, scale, (m2, n1))
         T_vals = np.clip(T_vals, 0, None)
         t_val_sum = np.sum(T_vals, axis=1)
-        t_val_sum = (t_val_sum - np.min(t_val_sum)) / (np.max(t_val_sum) - np.min(t_val_sum))
-        h_val_scale = (h_vals - np.min(h_vals)) / (np.max(h_vals) - np.min(h_vals))
-        cluster_vals = t_val_sum + h_val_scale
+        cluster_vals = t_val_sum + h_vals
         T_vals = T_vals * -1
         return h_vals, T_vals, cluster_vals
 
@@ -90,9 +84,7 @@ class StochasticBinPackerGenerator:
         T_vals = np.clip(T_vals, 0, None)
         T_vals = np.reshape(T_vals, (m2, n1))
         t_val_sum = np.sum(T_vals, axis=1)
-        t_val_sum = (t_val_sum - np.min(t_val_sum)) / (np.max(t_val_sum) - np.min(t_val_sum))
-        h_val_scale = (h_vals - np.min(h_vals)) / (np.max(h_vals) - np.min(h_vals))
-        cluster_vals = t_val_sum + h_val_scale
+        cluster_vals = t_val_sum + h_vals
         T_vals = T_vals * -1
         return h_vals, T_vals, cluster_vals
 
