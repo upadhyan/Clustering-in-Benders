@@ -262,12 +262,21 @@ def clustering_scenarios(problem, method, dr=True):
             for n in n_clust]
         scores = [silhouette_score(cvar, label) for label in labels]
     elif method == 'affinity':
-        labels = [AffinityPropagation(max_iter=1000).fit_predict(cvar)]
+        labels = [AffinityPropagation(max_iter=1000, damping=0.9).fit_predict(cvar)]
         scores = [12]
     elif method == 'random':
-        n_clust = (np.random.randint(2, 21) * k / 100)
+        n_clust = int((np.random.randint(2, 21) * k / 100))
         # n_clust = int(5 * k / 100)
-        labels = [np.random.randint(0, n_clust, problem.k)]
+        missing = True
+        label_set = np.random.randint(0, n_clust, problem.k)
+        while missing:
+            missing = False
+            for i in range(n_clust):
+                if int(i) not in label_set:
+                    missing = True
+            if missing:
+                label_set = np.random.randint(0, n_clust, problem.k)
+        labels = [label_set]
         scores = [12]
     else:
         raise ValueError("clustering type not given")
