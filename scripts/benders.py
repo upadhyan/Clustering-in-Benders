@@ -6,7 +6,6 @@ from gurobipy import GRB
 import numpy as np
 import time
 from sklearn.decomposition import PCA
-from scipy.spatial import distance
 
 
 def evaluate_solution(problem, x):
